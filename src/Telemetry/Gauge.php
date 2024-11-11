@@ -2,9 +2,7 @@
 
 namespace Utopia\Telemetry;
 
-class Gauge
+abstract class Gauge
 {
-    public function record(float|int $amount, iterable $attributes = []): void
-    {
-    }
+    abstract public function record(float|int $amount, iterable $attributes = []): void;
 }

@@ -11,6 +11,8 @@ use OpenTelemetry\Contrib\Otlp\ContentTypes;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
 use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
 use OpenTelemetry\SDK\Common\Attribute\Attributes;
+use OpenTelemetry\SDK\Common\Attribute\AttributesInterface;
+use OpenTelemetry\SDK\Metrics\Data\Temporality;
 use OpenTelemetry\SDK\Metrics\MeterProvider;
 use OpenTelemetry\SDK\Metrics\MetricExporterInterface;
 use OpenTelemetry\SDK\Metrics\MetricReader\ExportingReader;
@@ -28,6 +30,12 @@ class OpenTelemetry implements Adapter
 {
     private MetricReaderInterface $reader;
     private MeterInterface $meter;
+    private array $meterStorage = [
+        Counter::class => [],
+        UpDownCounter::class => [],
+        Histogram::class => [],
+        Gauge::class => [],
+    ];
 
     public function __construct(string $endpoint, string $serviceNamespace, string $serviceName, string $serviceInstanceId)
     {
@@ -40,7 +48,7 @@ class OpenTelemetry implements Adapter
         $this->meter = $this->initMeter($exporter, $attributes);
     }
 
-    protected function initMeter(MetricExporterInterface $exporter, Attributes $attributes): MeterInterface
+    protected function initMeter(MetricExporterInterface $exporter, AttributesInterface $attributes): MeterInterface
     {
         $this->reader = new ExportingReader($exporter);
         $meterProvider = MeterProvider::builder()
@@ -56,12 +64,21 @@ class OpenTelemetry implements Adapter
     protected function createExporter(string $endpoint): MetricExporterInterface
     {
         $transport = (new OtlpHttpTransportFactory())->create($endpoint, ContentTypes::PROTOBUF);
-        return new MetricExporter($transport);
+        return new MetricExporter($transport, Temporality::CUMULATIVE);
+    }
+
+    private function createMeter(string $type, string $name, callable $creator): mixed
+    {
+        if (!isset($this->meterStorage[$type][$name])) {
+            $this->meterStorage[$type][$name] = $creator();
+        }
+
+        return $this->meterStorage[$type][$name];
     }
 
     public function createCounter(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Counter
     {
-        $counter = $this->meter->createCounter($name, $unit, $description, $advisory);
+        $counter = $this->createMeter(Counter::class, $name, fn () => $this->meter->createCounter($name, $unit, $description, $advisory));
         return new class ($counter) extends Counter {
             public function __construct(private CounterInterface $counter)
             {
@@ -75,12 +92,12 @@ class OpenTelemetry implements Adapter
 
     public function createHistogram(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Histogram
     {
-        $histogram = $this->meter->createHistogram($name, $unit, $description, $advisory);
+        $histogram = $this->createMeter(Histogram::class, $name, fn () => $this->meter->createHistogram($name, $unit, $description, $advisory));
         return new class ($histogram) extends Histogram {
             public function __construct(private HistogramInterface $histogram)
             {
             }
-            public function add(float|int $amount, iterable $attributes = []): void
+            public function record(float|int $amount, iterable $attributes = []): void
             {
                 $this->histogram->record($amount, $attributes);
             }
@@ -89,12 +106,12 @@ class OpenTelemetry implements Adapter
 
     public function createGauge(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Gauge
     {
-        $gauge = $this->meter->createGauge($name, $unit, $description, $advisory);
+        $gauge = $this->createMeter(Gauge::class, $name, fn () => $this->meter->createGauge($name, $unit, $description, $advisory));
         return new class ($gauge) extends Gauge {
             public function __construct(private GaugeInterface $gauge)
             {
             }
-            public function add(float|int $amount, iterable $attributes = []): void
+            public function record(float|int $amount, iterable $attributes = []): void
             {
                 $this->gauge->record($amount, $attributes);
             }
@@ -103,7 +120,7 @@ class OpenTelemetry implements Adapter
 
     public function createUpDownCounter(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): UpDownCounter
     {
-        $upDownCounter = $this->meter->createUpDownCounter($name, $unit, $description, $advisory);
+        $upDownCounter = $this->createMeter(UpDownCounter::class, $name, fn () => $this->meter->createUpDownCounter($name, $unit, $description, $advisory));
         return new class ($upDownCounter) extends UpDownCounter {
             public function __construct(private UpDownCounterInterface $upDownCounter)
             {

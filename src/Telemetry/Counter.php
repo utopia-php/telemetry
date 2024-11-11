@@ -2,9 +2,7 @@
 
 namespace Utopia\Telemetry;
 
-class Counter
+abstract class Counter
 {
-    public function add(float|int $amount, iterable $attributes = []): void
-    {
-    }
+    abstract public function add(float|int $amount, iterable $attributes = []): void;
 }

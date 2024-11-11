@@ -2,9 +2,7 @@
 
 namespace Utopia\Telemetry;
 
-class Histogram
+abstract class Histogram
 {
-    public function record(float|int $amount, iterable $attributes = []): void
-    {
-    }
+    abstract public function record(float|int $amount, iterable $attributes = []): void;
 }
