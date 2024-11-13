@@ -7,7 +7,9 @@ use OpenTelemetry\API\Metrics\GaugeInterface;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterInterface;
 use OpenTelemetry\API\Metrics\UpDownCounterInterface;
+use OpenTelemetry\API\Signals;
 use OpenTelemetry\Contrib\Otlp\ContentTypes;
+use OpenTelemetry\Contrib\Otlp\HttpEndpointResolver;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
 use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
 use OpenTelemetry\SDK\Common\Attribute\Attributes;
@@ -63,6 +65,7 @@ class OpenTelemetry implements Adapter
 
     protected function createExporter(string $endpoint): MetricExporterInterface
     {
+        $endpoint = HttpEndpointResolver::create()->resolveToString($endpoint, Signals::METRICS);
         $transport = (new OtlpHttpTransportFactory())->create($endpoint, ContentTypes::PROTOBUF);
         return new MetricExporter($transport, Temporality::CUMULATIVE);
     }
