@@ -33,7 +33,8 @@
         "phpunit/phpunit": "^9.5.25",
         "laravel/pint": "^1.2",
         "phpstan/phpstan": "^1.10",
-        "phpbench/phpbench": "^1.2"
+        "phpbench/phpbench": "^1.2",
+        "utopia-php/logger": "0.6.*"
     },
     "config": {
         "allow-plugins": {
