@@ -7,29 +7,39 @@ use OpenTelemetry\API\Metrics\GaugeInterface;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterInterface;
 use OpenTelemetry\API\Metrics\UpDownCounterInterface;
+use OpenTelemetry\API\Trace\SpanInterface;
+use OpenTelemetry\API\Trace\TracerInterface;
 use OpenTelemetry\Contrib\Otlp\ContentTypes;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
 use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
+use OpenTelemetry\Contrib\Otlp\SpanExporter;
 use OpenTelemetry\SDK\Common\Attribute\Attributes;
 use OpenTelemetry\SDK\Common\Attribute\AttributesInterface;
 use OpenTelemetry\SDK\Metrics\Data\Temporality;
 use OpenTelemetry\SDK\Metrics\MeterProvider;
-use OpenTelemetry\SDK\Metrics\MetricExporterInterface;
+use OpenTelemetry\SDK\Metrics\MeterProviderInterface;
 use OpenTelemetry\SDK\Metrics\MetricReader\ExportingReader;
 use OpenTelemetry\SDK\Metrics\MetricReaderInterface;
 use OpenTelemetry\SDK\Resource\ResourceInfo;
 use OpenTelemetry\SDK\Sdk;
+use OpenTelemetry\SDK\Trace\SpanProcessor\SimpleSpanProcessor;
+use OpenTelemetry\SDK\Trace\SpanProcessorInterface;
+use OpenTelemetry\SDK\Trace\TracerProvider;
+use OpenTelemetry\SDK\Trace\TracerProviderInterface;
 use OpenTelemetry\SemConv\ResourceAttributes;
 use Utopia\Telemetry\Adapter;
 use Utopia\Telemetry\Counter;
 use Utopia\Telemetry\Gauge;
 use Utopia\Telemetry\Histogram;
+use Utopia\Telemetry\Span;
 use Utopia\Telemetry\UpDownCounter;
 
 class OpenTelemetry implements Adapter
 {
-    private MetricReaderInterface $reader;
+    private MetricReaderInterface $metricsReader;
+    private SpanProcessorInterface $spanProcessor;
     private MeterInterface $meter;
+    private TracerInterface $tracer;
     private array $meterStorage = [
         Counter::class => [],
         UpDownCounter::class => [],
@@ -37,34 +47,44 @@ class OpenTelemetry implements Adapter
         Gauge::class => [],
     ];
 
-    public function __construct(string $endpoint, string $serviceNamespace, string $serviceName, string $serviceInstanceId)
+    public function __construct(string $metricsEndpoint, string $tracingEndpoint, string $serviceNamespace, string $serviceName, string $serviceInstanceId)
     {
-        $exporter = $this->createExporter($endpoint);
         $attributes = Attributes::create([
             'service.namespace' => $serviceNamespace,
             'service.name' => $serviceName,
             'service.instance.id' => $serviceInstanceId,
         ]);
-        $this->meter = $this->initMeter($exporter, $attributes);
+        $meterProvider = $this->initMeter($metricsEndpoint, $attributes);
+        $this->meter = $meterProvider->getMeter('cloud');
+
+        $tracingProvider = $this->initTracer($tracingEndpoint, $attributes);
+        $this->tracer = $tracingProvider->getTracer('cloud');
+
+        Sdk::builder()
+            ->setMeterProvider($meterProvider)
+            ->setTracerProvider($tracingProvider)
+            ->buildAndRegisterGlobal();
     }
 
-    protected function initMeter(MetricExporterInterface $exporter, AttributesInterface $attributes): MeterInterface
-    {
-        $this->reader = new ExportingReader($exporter);
-        $meterProvider = MeterProvider::builder()
-            ->setResource(ResourceInfo::create($attributes, ResourceAttributes::SCHEMA_URL))
-            ->addReader($this->reader)
-            ->build();
-
-        Sdk::builder()->setMeterProvider($meterProvider)->buildAndRegisterGlobal();
-
-        return $meterProvider->getMeter('cloud');
-    }
-
-    protected function createExporter(string $endpoint): MetricExporterInterface
+    protected function initMeter(string $endpoint, AttributesInterface $attributes): MeterProviderInterface
     {
         $transport = (new OtlpHttpTransportFactory())->create($endpoint, ContentTypes::PROTOBUF);
-        return new MetricExporter($transport, Temporality::CUMULATIVE);
+        $exporter = new MetricExporter($transport, Temporality::CUMULATIVE);
+        $this->metricsReader = new ExportingReader($exporter);
+        return MeterProvider::builder()
+            ->setResource(ResourceInfo::create($attributes, ResourceAttributes::SCHEMA_URL))
+            ->addReader($this->metricsReader)
+            ->build();
+    }
+
+    protected function initTracer(string $endpoint, AttributesInterface $attributes): TracerProviderInterface
+    {
+        $transport = (new OtlpHttpTransportFactory())->create($endpoint, ContentTypes::PROTOBUF);
+        $this->spanProcessor = new SimpleSpanProcessor(new SpanExporter($transport));
+        return TracerProvider::builder()
+            ->setResource(ResourceInfo::create($attributes, ResourceAttributes::SCHEMA_URL))
+            ->addSpanProcessor($this->spanProcessor)
+            ->build();
     }
 
     private function createMeter(string $type, string $name, callable $creator): mixed
@@ -132,8 +152,22 @@ class OpenTelemetry implements Adapter
         };
     }
 
+    public function createSpan(string $name): Span
+    {
+        $span = $this->tracer->spanBuilder($name)->startSpan();
+        return new class($span) extends Span {
+            public function __construct(private SpanInterface $span)
+            {
+            }
+            public function end(): void
+            {
+                $this->span->end();
+            }
+        };
+    }
+
     public function collect(): bool
     {
-        return $this->reader->collect();
+        return $this->metricsReader->collect();
     }
 }

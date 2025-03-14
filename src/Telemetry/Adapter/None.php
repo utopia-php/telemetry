@@ -6,6 +6,7 @@ use Utopia\Telemetry\Adapter;
 use Utopia\Telemetry\Counter;
 use Utopia\Telemetry\Gauge;
 use Utopia\Telemetry\Histogram;
+use Utopia\Telemetry\Span;
 use Utopia\Telemetry\UpDownCounter;
 
 class None implements Adapter
@@ -41,6 +42,15 @@ class None implements Adapter
     {
         return new class () extends UpDownCounter {
             public function add(float|int $amount, iterable $attributes = []): void
+            {
+            }
+        };
+    }
+
+    public function createSpan(string $name): Span
+    {
+        return new class () extends Span {
+            public function end(): void
             {
             }
         };
