@@ -32,5 +32,7 @@ interface Adapter
         array $advisory = [],
     ): UpDownCounter;
 
+    public function createSpan(string $name): Span;
+
     public function collect(): bool;
 }
