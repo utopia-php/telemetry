@@ -123,7 +123,7 @@ class Swoole implements TransportInterface
             if ($statusCode < 0) {
                 $forceClose = true;
                 $errCode = \is_int($client->errCode) ? $client->errCode : 0;
-                $errMsg = $client->errMsg ?? 'Unknown error';
+                $errMsg = \is_string($client->errMsg) ? $client->errMsg : 'Unknown error';
 
                 return new ErrorFuture(new Exception("OTLP connection failed: {$errMsg} (code: {$errCode})"));
             }
