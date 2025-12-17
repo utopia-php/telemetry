@@ -20,4 +20,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run tests
-        run: PHP_VERSION=${{ matrix.php }} docker compose run --rm tests composer test
+        run: |
+          PHP_VERSION=${{ matrix.php }} docker compose run --rm tests sh -c "
+            git config --global --add safe.directory /app &&
+            composer install --no-interaction &&
+            composer test
+          "
