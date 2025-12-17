@@ -23,6 +23,6 @@ jobs:
         run: |
           PHP_VERSION=${{ matrix.php }} docker compose run --rm tests sh -c "
             git config --global --add safe.directory /app &&
-            composer install --no-interaction &&
+            composer update --no-interaction &&
             composer test
           "
