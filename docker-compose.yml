@@ -12,12 +12,12 @@ services:
     networks:
       - telemetry
 
-  # PHP with Swoole for running tests
-  # Usage: docker compose run --rm php composer test
-  php:
+  tests:
     build:
       context: .
       dockerfile: docker/Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
     volumes:
       - .:/app
       - composer-cache:/root/.composer/cache

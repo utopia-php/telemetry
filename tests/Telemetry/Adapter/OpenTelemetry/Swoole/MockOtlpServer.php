@@ -2,12 +2,15 @@
 
 namespace Tests\Telemetry\Adapter\OpenTelemetry\Swoole;
 
+use Swoole\Coroutine;
 use Swoole\Coroutine\Http\Client;
 use Swoole\Coroutine\Http\Server;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
+use Utopia\Telemetry\Exception;
 
 use function Swoole\Coroutine\go;
+use function Swoole\Coroutine\run;
 
 /**
  * Mock OTLP server for integration testing.
@@ -91,7 +94,7 @@ class MockOtlpServer
             ];
 
             if ($this->responseDelay > 0) {
-                \Swoole\Coroutine::sleep($this->responseDelay);
+                Coroutine::sleep($this->responseDelay);
             }
 
             $response->status($this->statusCode);
@@ -113,6 +116,8 @@ class MockOtlpServer
 
     /**
      * Wait for the server to be ready to accept connections.
+     *
+     * @throws Exception If the server fails to start within the timeout period
      */
     private function waitUntilReady(float $timeout = 2.0): void
     {
@@ -127,8 +132,15 @@ class MockOtlpServer
                 return;
             }
             $client->close();
-            \Swoole\Coroutine::sleep(0.01);
+            Coroutine::sleep(0.01);
         }
+
+        throw new Exception(sprintf(
+            'MockOtlpServer failed to start: could not connect to %s:%d within %.1f seconds',
+            self::HOST,
+            $this->port,
+            $timeout
+        ));
     }
 
     /**
@@ -191,11 +203,10 @@ class MockOtlpServer
             }
         };
 
-        // Check if already in coroutine context
-        if (\Swoole\Coroutine::getCid() > 0) {
+        if (Coroutine::getCid() > 0) {
             $executor();
         } else {
-            \Swoole\Coroutine\run($executor);
+            run($executor);
         }
 
         if ($exception !== null) {

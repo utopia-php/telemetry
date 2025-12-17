@@ -8,7 +8,7 @@ on:
 
 jobs:
   tests:
-    name: PHP ${{ matrix.php }} Tests
+    name: Tests (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -19,28 +19,5 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php }}
-          extensions: swoole, sockets, protobuf, opentelemetry
-          tools: composer:v2
-          coverage: none
-
-      - name: Get Composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-php-${{ matrix.php }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-php-${{ matrix.php }}-composer-
-
-      - name: Install dependencies
-        run: composer update --prefer-dist --no-progress
-
       - name: Run tests
-        run: composer test
+        run: PHP_VERSION=${{ matrix.php }} docker compose run --rm tests composer test

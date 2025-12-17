@@ -147,9 +147,13 @@ class TransportTest extends TestCase
 
             $future = $transport->send('test payload');
 
-            $this->expectException(Exception::class);
-            $this->expectExceptionMessage('Transport has been shut down');
-            $future->await();
+            try {
+                $future->await();
+                $this->fail('Expected exception was not thrown');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals('Transport has been shut down', $e->getMessage());
+            }
         });
     }
 
@@ -173,12 +177,12 @@ class TransportTest extends TestCase
         $this->assertEquals(ContentTypes::PROTOBUF, $transport->contentType());
     }
 
-    public function testEndpointDefaultsToLocalhost(): void
+    public function testMalformedUrlThrowsException(): void
     {
-        // Malformed URL should still create transport (defaults to localhost)
-        $transport = new Swoole('http:///v1/metrics');
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid endpoint URL');
 
-        $this->assertEquals(ContentTypes::PROTOBUF, $transport->contentType());
+        new Swoole('http:///v1/metrics');
     }
 
     public function testDefaultPortForHttp(): void
