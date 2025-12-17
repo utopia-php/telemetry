@@ -12,6 +12,7 @@ use OpenTelemetry\Contrib\Otlp\MetricExporter;
 use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
 use OpenTelemetry\SDK\Common\Attribute\Attributes;
 use OpenTelemetry\SDK\Common\Attribute\AttributesInterface;
+use OpenTelemetry\SDK\Common\Export\TransportInterface;
 use OpenTelemetry\SDK\Metrics\Data\Temporality;
 use OpenTelemetry\SDK\Metrics\MeterProvider;
 use OpenTelemetry\SDK\Metrics\MetricExporterInterface;
@@ -29,7 +30,12 @@ use Utopia\Telemetry\UpDownCounter;
 class OpenTelemetry implements Adapter
 {
     private MetricReaderInterface $reader;
+
     private MeterInterface $meter;
+
+    /**
+     * @var array<class-string, array<string, Counter|UpDownCounter|Histogram|Gauge>>
+     */
     private array $meterStorage = [
         Counter::class => [],
         UpDownCounter::class => [],
@@ -37,17 +43,41 @@ class OpenTelemetry implements Adapter
         Gauge::class => [],
     ];
 
-    public function __construct(string $endpoint, string $serviceNamespace, string $serviceName, string $serviceInstanceId)
-    {
-        $exporter = $this->createExporter($endpoint);
+    /**
+     * @param string $endpoint
+     * @param string $serviceNamespace
+     * @param string $serviceName
+     * @param string $serviceInstanceId
+     * @param TransportInterface<string>|null $transport
+     */
+    public function __construct(
+        string $endpoint,
+        string $serviceNamespace,
+        string $serviceName,
+        string $serviceInstanceId,
+        protected ?TransportInterface $transport = null
+    ) {
+        if ($this->transport === null) {
+            $this->transport = (new OtlpHttpTransportFactory())
+                ->create($endpoint, ContentTypes::PROTOBUF);
+        }
+
+        $exporter = $this->createExporter($this->transport);
+
         $attributes = Attributes::create([
             'service.namespace' => $serviceNamespace,
             'service.name' => $serviceName,
             'service.instance.id' => $serviceInstanceId,
         ]);
+
         $this->meter = $this->initMeter($exporter, $attributes);
     }
 
+    /**
+     * Initialize Meter
+     *
+     * @param AttributesInterface<string, mixed> $attributes
+     */
     protected function initMeter(MetricExporterInterface $exporter, AttributesInterface $attributes): MeterInterface
     {
         $this->reader = new ExportingReader($exporter);
@@ -61,77 +91,140 @@ class OpenTelemetry implements Adapter
         return $meterProvider->getMeter('cloud');
     }
 
-    protected function createExporter(string $endpoint): MetricExporterInterface
+    /**
+     * Create Metric Exporter
+     *
+     * @param TransportInterface<string> $transport
+     */
+    protected function createExporter(TransportInterface $transport): MetricExporterInterface
     {
-        $transport = (new OtlpHttpTransportFactory())->create($endpoint, ContentTypes::PROTOBUF);
+        /** @phpstan-ignore argument.type */
         return new MetricExporter($transport, Temporality::CUMULATIVE);
     }
 
-    private function createMeter(string $type, string $name, callable $creator): mixed
+    /**
+     * @template T of Counter|UpDownCounter|Histogram|Gauge
+     * @param class-string<T> $type
+     * @param callable(): T $creator
+     * @return T
+     */
+    private function createMeter(string $type, string $name, callable $creator): Counter|UpDownCounter|Histogram|Gauge
     {
-        if (!isset($this->meterStorage[$type][$name])) {
+        if (! isset($this->meterStorage[$type][$name])) {
             $this->meterStorage[$type][$name] = $creator();
         }
 
+        /** @var T */
         return $this->meterStorage[$type][$name];
     }
 
+    /**
+     * Create a Counter metric
+     *
+     * @param array<string, mixed> $advisory
+     */
     public function createCounter(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Counter
     {
-        $counter = $this->createMeter(Counter::class, $name, fn () => $this->meter->createCounter($name, $unit, $description, $advisory));
-        return new class ($counter) extends Counter {
-            public function __construct(private CounterInterface $counter)
-            {
-            }
-            public function add(float|int $amount, iterable $attributes = []): void
-            {
-                $this->counter->add($amount, $attributes);
-            }
-        };
+        return $this->createMeter(Counter::class, $name, function () use ($name, $unit, $description, $advisory) {
+            $counter = $this->meter->createCounter($name, $unit, $description, $advisory);
+
+            return new class ($counter) extends Counter {
+                public function __construct(private CounterInterface $counter)
+                {
+                }
+
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
+                public function add(float|int $amount, iterable $attributes = []): void
+                {
+                    $this->counter->add($amount, $attributes);
+                }
+            };
+        });
     }
 
+    /**
+     * Create a Histogram metric
+     *
+     * @param array<string, mixed> $advisory
+     */
     public function createHistogram(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Histogram
     {
-        $histogram = $this->createMeter(Histogram::class, $name, fn () => $this->meter->createHistogram($name, $unit, $description, $advisory));
-        return new class ($histogram) extends Histogram {
-            public function __construct(private HistogramInterface $histogram)
-            {
-            }
-            public function record(float|int $amount, iterable $attributes = []): void
-            {
-                $this->histogram->record($amount, $attributes);
-            }
-        };
+        return $this->createMeter(Histogram::class, $name, function () use ($name, $unit, $description, $advisory) {
+            $histogram = $this->meter->createHistogram($name, $unit, $description, $advisory);
+
+            return new class ($histogram) extends Histogram {
+                public function __construct(private HistogramInterface $histogram)
+                {
+                }
+
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
+                public function record(float|int $amount, iterable $attributes = []): void
+                {
+                    $this->histogram->record($amount, $attributes);
+                }
+            };
+        });
     }
 
+    /**
+     * Create a Gauge metric
+     *
+     * @param array<string, mixed> $advisory
+     */
     public function createGauge(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Gauge
     {
-        $gauge = $this->createMeter(Gauge::class, $name, fn () => $this->meter->createGauge($name, $unit, $description, $advisory));
-        return new class ($gauge) extends Gauge {
-            public function __construct(private GaugeInterface $gauge)
-            {
-            }
-            public function record(float|int $amount, iterable $attributes = []): void
-            {
-                $this->gauge->record($amount, $attributes);
-            }
-        };
+        return $this->createMeter(Gauge::class, $name, function () use ($name, $unit, $description, $advisory) {
+            $gauge = $this->meter->createGauge($name, $unit, $description, $advisory);
+
+            return new class ($gauge) extends Gauge {
+                public function __construct(private GaugeInterface $gauge)
+                {
+                }
+
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
+                public function record(float|int $amount, iterable $attributes = []): void
+                {
+                    $this->gauge->record($amount, $attributes);
+                }
+            };
+        });
     }
 
+    /**
+     * Create an UpDownCounter metric
+     *
+     * @param array<string, mixed> $advisory
+     */
     public function createUpDownCounter(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): UpDownCounter
     {
-        $upDownCounter = $this->createMeter(UpDownCounter::class, $name, fn () => $this->meter->createUpDownCounter($name, $unit, $description, $advisory));
-        return new class ($upDownCounter) extends UpDownCounter {
-            public function __construct(private UpDownCounterInterface $upDownCounter)
-            {
-            }
-            public function add(float|int $amount, iterable $attributes = []): void
-            {
-                $this->upDownCounter->add($amount, $attributes);
-            }
-        };
+        return $this->createMeter(UpDownCounter::class, $name, function () use ($name, $unit, $description, $advisory) {
+            $upDownCounter = $this->meter->createUpDownCounter($name, $unit, $description, $advisory);
+
+            return new class ($upDownCounter) extends UpDownCounter {
+                public function __construct(private UpDownCounterInterface $upDownCounter)
+                {
+                }
+
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
+                public function add(float|int $amount, iterable $attributes = []): void
+                {
+                    $this->upDownCounter->add($amount, $attributes);
+                }
+            };
+        });
     }
 
+    /**
+     * Collect and export metrics
+     */
     public function collect(): bool
     {
         return $this->reader->collect();
