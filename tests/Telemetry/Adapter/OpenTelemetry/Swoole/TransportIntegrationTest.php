@@ -5,7 +5,7 @@ namespace Tests\Telemetry\Adapter\OpenTelemetry\Swoole;
 use OpenTelemetry\Contrib\Otlp\ContentTypes;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
-use Utopia\Telemetry\Adapter\OpenTelemetry\Swoole\Transport;
+use Utopia\Telemetry\Adapter\OpenTelemetry\Transport\Swoole;
 use Utopia\Telemetry\Exception;
 
 use function Swoole\Coroutine\go;
@@ -25,7 +25,7 @@ class TransportIntegrationTest extends TestCase
         MockOtlpServer::run(function (MockOtlpServer $server) {
             $server->respondWith(200, 'OK');
 
-            $transport = new Transport($server->getEndpoint());
+            $transport = new Swoole($server->getEndpoint());
             $testPayload = 'test-metric-payload-data';
 
             $result = $transport->send($testPayload)->await();
@@ -44,7 +44,7 @@ class TransportIntegrationTest extends TestCase
     public function testSendWithCustomHeaders(): void
     {
         MockOtlpServer::run(function (MockOtlpServer $server) {
-            $transport = new Transport(
+            $transport = new Swoole(
                 endpoint: $server->getEndpoint(),
                 headers: [
                     'Authorization' => 'Bearer test-token',
@@ -67,7 +67,7 @@ class TransportIntegrationTest extends TestCase
         MockOtlpServer::run(function (MockOtlpServer $server) {
             $server->respondWith(500, 'Internal Server Error');
 
-            $transport = new Transport($server->getEndpoint());
+            $transport = new Swoole($server->getEndpoint());
 
             $this->expectException(Exception::class);
             $this->expectExceptionMessage('500');
@@ -83,7 +83,7 @@ class TransportIntegrationTest extends TestCase
     public function testMultipleSequentialSends(): void
     {
         MockOtlpServer::run(function (MockOtlpServer $server) {
-            $transport = new Transport(
+            $transport = new Swoole(
                 endpoint: $server->getEndpoint(),
                 poolSize: 2,
             );
@@ -103,7 +103,7 @@ class TransportIntegrationTest extends TestCase
         MockOtlpServer::run(function (MockOtlpServer $server) {
             $server->withDelay(0.01);
 
-            $transport = new Transport(
+            $transport = new Swoole(
                 endpoint: $server->getEndpoint(),
                 poolSize: 4,
             );
@@ -130,7 +130,7 @@ class TransportIntegrationTest extends TestCase
     public function testJsonContentType(): void
     {
         MockOtlpServer::run(function (MockOtlpServer $server) {
-            $transport = new Transport(
+            $transport = new Swoole(
                 endpoint: $server->getEndpoint(),
                 contentType: ContentTypes::JSON,
             );
@@ -149,7 +149,7 @@ class TransportIntegrationTest extends TestCase
         $exception = null;
 
         run(function () use (&$exception) {
-            $transport = new Transport(
+            $transport = new Swoole(
                 endpoint: 'http://127.0.0.1:19999/v1/metrics',
                 timeout: 0.5,
             );
@@ -174,7 +174,7 @@ class TransportIntegrationTest extends TestCase
     public function testKeepAliveConnectionReuse(): void
     {
         MockOtlpServer::run(function (MockOtlpServer $server) {
-            $transport = new Transport(
+            $transport = new Swoole(
                 endpoint: $server->getEndpoint(),
                 poolSize: 1,
             );
@@ -193,7 +193,7 @@ class TransportIntegrationTest extends TestCase
     public function testLargePayload(): void
     {
         MockOtlpServer::run(function (MockOtlpServer $server) {
-            $transport = new Transport($server->getEndpoint());
+            $transport = new Swoole($server->getEndpoint());
 
             // 1MB payload
             $largePayload = str_repeat('x', 1024 * 1024);
@@ -210,7 +210,7 @@ class TransportIntegrationTest extends TestCase
     public function testServerResetsRequestTracking(): void
     {
         MockOtlpServer::run(function (MockOtlpServer $server) {
-            $transport = new Transport($server->getEndpoint());
+            $transport = new Swoole($server->getEndpoint());
 
             $transport->send('first')->await();
             $this->assertEquals(1, $server->getRequestCount());

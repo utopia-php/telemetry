@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Telemetry\Adapter\OpenTelemetry\Swoole;
+namespace Utopia\Telemetry\Adapter\OpenTelemetry\Transport;
 
 use OpenTelemetry\Contrib\Otlp\ContentTypes;
 use OpenTelemetry\SDK\Common\Export\TransportInterface;
@@ -19,7 +19,7 @@ use Swoole\Coroutine\Http\Client;
  * Uses connection pooling with keep-alive for maximum throughput.
  * Designed for Swoole's coroutine scheduler without cURL multi-handle conflicts.
  */
-class Transport implements TransportInterface
+class Swoole implements TransportInterface
 {
     private string $host;
     private int $port;
