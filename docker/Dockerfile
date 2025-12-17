@@ -32,7 +32,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 
 # Install dependencies
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+RUN composer install --no-scripts --no-autoloader --prefer-dist
 
 # Copy the rest of the application
 COPY . .
