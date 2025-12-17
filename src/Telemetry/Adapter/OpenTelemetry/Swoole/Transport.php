@@ -94,7 +94,7 @@ class Transport implements TransportInterface
      */
     private function popClient(): Client
     {
-        $client = $this->pool->pop(0);
+        $client = $this->pool->pop(0.001);
         if ($client === false) {
             $client = $this->pool->pop(0.05);
         }
