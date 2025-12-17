@@ -75,9 +75,9 @@ class Swoole implements TransportInterface
         );
         $this->settings = [
             'timeout' => $this->timeout,
-            'connect_timeout' => \min(1.0, $this->timeout),
-            'read_timeout' => \min(1.0, $this->timeout),
-            'write_timeout' => \min(1.0, $this->timeout),
+            'connect_timeout' => \max(0.5, $this->timeout),
+            'read_timeout' => \max(1.0, $this->timeout),
+            'write_timeout' => \max(1.0, $this->timeout),
             'keep_alive' => true,
             'open_tcp_nodelay' => true,
             'open_tcp_keepalive' => true,
