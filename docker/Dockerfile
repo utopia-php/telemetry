@@ -20,6 +20,6 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /app
 
 COPY composer.json composer.lock ./
-RUN composer install --no-scripts --no-autoloader --prefer-dist
+RUN composer install --no-scripts --no-autoloader --prefer-dist --ignore-platform-reqs
 COPY . .
 CMD ["tail", "-f", "/dev/null"]
