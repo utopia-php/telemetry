@@ -148,7 +148,7 @@ class TransportTest extends TestCase
             $future = $transport->send('test payload');
 
             $this->expectException(Exception::class);
-            $this->expectExceptionMessage('Swoole has been shut down');
+            $this->expectExceptionMessage('Transport has been shut down');
             $future->await();
         });
     }
