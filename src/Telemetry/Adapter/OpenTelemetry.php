@@ -33,6 +33,9 @@ class OpenTelemetry implements Adapter
 
     private MeterInterface $meter;
 
+    /**
+     * @var array<class-string, array<string, Counter|UpDownCounter|Histogram|Gauge>>
+     */
     private array $meterStorage = [
         Counter::class => [],
         UpDownCounter::class => [],
@@ -45,7 +48,7 @@ class OpenTelemetry implements Adapter
      * @param string $serviceNamespace
      * @param string $serviceName
      * @param string $serviceInstanceId
-     * @param TransportInterface|null $transport
+     * @param TransportInterface<string>|null $transport
      */
     public function __construct(
         string $endpoint,
@@ -72,6 +75,8 @@ class OpenTelemetry implements Adapter
 
     /**
      * Initialize Meter
+     *
+     * @param AttributesInterface<string, mixed> $attributes
      */
     protected function initMeter(MetricExporterInterface $exporter, AttributesInterface $attributes): MeterInterface
     {
@@ -88,23 +93,35 @@ class OpenTelemetry implements Adapter
 
     /**
      * Create Metric Exporter
+     *
+     * @param TransportInterface<string> $transport
      */
     protected function createExporter(TransportInterface $transport): MetricExporterInterface
     {
+        /** @phpstan-ignore argument.type */
         return new MetricExporter($transport, Temporality::CUMULATIVE);
     }
 
-    private function createMeter(string $type, string $name, callable $creator): mixed
+    /**
+     * @template T of Counter|UpDownCounter|Histogram|Gauge
+     * @param class-string<T> $type
+     * @param callable(): T $creator
+     * @return T
+     */
+    private function createMeter(string $type, string $name, callable $creator): Counter|UpDownCounter|Histogram|Gauge
     {
         if (! isset($this->meterStorage[$type][$name])) {
             $this->meterStorage[$type][$name] = $creator();
         }
 
+        /** @var T */
         return $this->meterStorage[$type][$name];
     }
 
     /**
      * Create a Counter metric
+     *
+     * @param array<string, mixed> $advisory
      */
     public function createCounter(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Counter
     {
@@ -116,6 +133,9 @@ class OpenTelemetry implements Adapter
                 {
                 }
 
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
                 public function add(float|int $amount, iterable $attributes = []): void
                 {
                     $this->counter->add($amount, $attributes);
@@ -126,6 +146,8 @@ class OpenTelemetry implements Adapter
 
     /**
      * Create a Histogram metric
+     *
+     * @param array<string, mixed> $advisory
      */
     public function createHistogram(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Histogram
     {
@@ -137,6 +159,9 @@ class OpenTelemetry implements Adapter
                 {
                 }
 
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
                 public function record(float|int $amount, iterable $attributes = []): void
                 {
                     $this->histogram->record($amount, $attributes);
@@ -147,6 +172,8 @@ class OpenTelemetry implements Adapter
 
     /**
      * Create a Gauge metric
+     *
+     * @param array<string, mixed> $advisory
      */
     public function createGauge(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): Gauge
     {
@@ -158,6 +185,9 @@ class OpenTelemetry implements Adapter
                 {
                 }
 
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
                 public function record(float|int $amount, iterable $attributes = []): void
                 {
                     $this->gauge->record($amount, $attributes);
@@ -168,6 +198,8 @@ class OpenTelemetry implements Adapter
 
     /**
      * Create an UpDownCounter metric
+     *
+     * @param array<string, mixed> $advisory
      */
     public function createUpDownCounter(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): UpDownCounter
     {
@@ -179,6 +211,9 @@ class OpenTelemetry implements Adapter
                 {
                 }
 
+                /**
+                 * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
+                 */
                 public function add(float|int $amount, iterable $attributes = []): void
                 {
                     $this->upDownCounter->add($amount, $attributes);

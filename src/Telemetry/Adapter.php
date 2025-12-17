@@ -4,6 +4,9 @@ namespace Utopia\Telemetry;
 
 interface Adapter
 {
+    /**
+     * @param array<string, mixed> $advisory
+     */
     public function createCounter(
         string $name,
         ?string $unit = null,
@@ -11,6 +14,9 @@ interface Adapter
         array $advisory = [],
     ): Counter;
 
+    /**
+     * @param array<string, mixed> $advisory
+     */
     public function createHistogram(
         string $name,
         ?string $unit = null,
@@ -18,6 +24,9 @@ interface Adapter
         array $advisory = [],
     ): Histogram;
 
+    /**
+     * @param array<string, mixed> $advisory
+     */
     public function createGauge(
         string $name,
         ?string $unit = null,
@@ -25,6 +34,9 @@ interface Adapter
         array $advisory = [],
     ): Gauge;
 
+    /**
+     * @param array<string, mixed> $advisory
+     */
     public function createUpDownCounter(
         string $name,
         ?string $unit = null,

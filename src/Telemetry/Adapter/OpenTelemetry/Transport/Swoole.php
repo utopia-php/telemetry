@@ -18,6 +18,8 @@ use Swoole\Coroutine\Http\Client;
  *
  * Uses connection pooling with keep-alive for maximum throughput.
  * Designed for Swoole's coroutine scheduler without cURL multi-handle conflicts.
+ *
+ * @implements TransportInterface<string>
  */
 class Swoole implements TransportInterface
 {
@@ -37,6 +39,10 @@ class Swoole implements TransportInterface
 
     private Atomic $shutdown;
 
+    /**
+     * @param 'application/json'|'application/x-ndjson'|'application/x-protobuf' $contentType
+     * @param array<string, string> $headers
+     */
     public function __construct(
         string $endpoint,
         private string $contentType = ContentTypes::PROTOBUF,
@@ -58,11 +64,13 @@ class Swoole implements TransportInterface
         $this->shutdown = new Atomic(0);
         $this->pool = new Channel($this->poolSize);
 
-        $this->baseHeaders = [
-            'Content-Type' => $this->contentType,
-            'Connection' => 'keep-alive',
-            ...$this->headers,
-        ];
+        $this->baseHeaders = \array_merge(
+            [
+                'Content-Type' => $this->contentType,
+                'Connection' => 'keep-alive',
+            ],
+            $this->headers
+        );
         $this->settings = [
             'timeout' => $this->timeout,
             'connect_timeout' => \min(1.0, $this->timeout),
@@ -125,6 +133,9 @@ class Swoole implements TransportInterface
         }
     }
 
+    /**
+     * @return FutureInterface<string>
+     */
     public function send(string $payload, ?CancellationInterface $cancellation = null): FutureInterface
     {
         if ($this->shutdown->get() === 1) {
@@ -145,16 +156,17 @@ class Swoole implements TransportInterface
             // Connection error (timeout, reset, etc.)
             if ($statusCode < 0) {
                 $forceClose = true;
-                $errCode = $client->errCode;
+                $errCode = \is_int($client->errCode) ? $client->errCode : 0;
                 $errMsg = \socket_strerror($errCode);
 
-                return new ErrorFuture(new Exception("OTLP connection failed: $errMsg (code: $errCode)"));
+                return new ErrorFuture(new Exception("OTLP connection failed: {$errMsg} (code: {$errCode})"));
             }
 
             $body = $client->getBody();
+            $bodyStr = \is_string($body) ? $body : '';
 
             if ($statusCode >= 200 && $statusCode < 300) {
-                return new CompletedFuture($body);
+                return new CompletedFuture($bodyStr);
             }
 
             // Server error may need fresh connection
@@ -162,7 +174,8 @@ class Swoole implements TransportInterface
                 $forceClose = true;
             }
 
-            return new ErrorFuture(new Exception("OTLP export failed with status $statusCode: $body"));
+            $statusCodeStr = \is_int($statusCode) ? (string)$statusCode : 'unknown';
+            return new ErrorFuture(new Exception("OTLP export failed with status {$statusCodeStr}: {$bodyStr}"));
         } catch (\Throwable $e) {
             $forceClose = true;
 
