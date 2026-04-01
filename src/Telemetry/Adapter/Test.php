@@ -6,6 +6,7 @@ use Utopia\Telemetry\Adapter;
 use Utopia\Telemetry\Counter;
 use Utopia\Telemetry\Gauge;
 use Utopia\Telemetry\Histogram;
+use Utopia\Telemetry\ObservableGauge;
 use Utopia\Telemetry\UpDownCounter;
 
 /**
@@ -32,6 +33,11 @@ class Test implements Adapter
      * @var array<string, UpDownCounter>
      */
     public array $upDownCounters = [];
+
+    /**
+     * @var array<string, ObservableGauge>
+     */
+    public array $observableGauges = [];
 
     /**
      * @param array<string, mixed> $advisory
@@ -123,6 +129,26 @@ class Test implements Adapter
         };
         $this->upDownCounters[$name] = $upDownCounter;
         return $upDownCounter;
+    }
+
+    /**
+     * @param array<string, mixed> $advisory
+     */
+    public function createObservableGauge(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): ObservableGauge
+    {
+        $gauge = new class () extends ObservableGauge {
+            /**
+             * @var array<int, callable>
+             */
+            public array $callbacks = [];
+
+            public function observe(callable $callback): void
+            {
+                $this->callbacks[] = $callback;
+            }
+        };
+        $this->observableGauges[$name] = $gauge;
+        return $gauge;
     }
 
     public function collect(): bool

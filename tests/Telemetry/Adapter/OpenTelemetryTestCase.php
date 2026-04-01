@@ -8,6 +8,7 @@ use Utopia\Telemetry\Adapter\OpenTelemetry;
 use Utopia\Telemetry\Counter;
 use Utopia\Telemetry\Gauge;
 use Utopia\Telemetry\Histogram;
+use Utopia\Telemetry\ObservableGauge;
 use Utopia\Telemetry\UpDownCounter;
 
 /**
@@ -159,6 +160,38 @@ abstract class OpenTelemetryTestCase extends TestCase
         $this->assertTrue(true);
     }
 
+    public function testCreateObservableGauge(): void
+    {
+        $gauge = $this->adapter->createObservableGauge(
+            name: 'test_observable_gauge',
+            unit: 'bytes',
+            description: 'Test observable gauge metric'
+        );
+
+        $this->assertInstanceOf(ObservableGauge::class, $gauge);
+    }
+
+    public function testObservableGaugeObserve(): void
+    {
+        $gauge = $this->adapter->createObservableGauge('observe_test_gauge');
+
+        // Should not throw
+        $gauge->observe(function (callable $observer): void {
+            $observer(1024);
+            $observer(2048.5, ['host' => 'server-1']);
+        });
+
+        $this->assertTrue(true);
+    }
+
+    public function testObservableGaugeCaching(): void
+    {
+        $gauge1 = $this->adapter->createObservableGauge('cached_observable_gauge');
+        $gauge2 = $this->adapter->createObservableGauge('cached_observable_gauge');
+
+        $this->assertSame($gauge1, $gauge2);
+    }
+
     public function testMeterCaching(): void
     {
         $counter1 = $this->adapter->createCounter('cached_counter');
@@ -229,10 +262,12 @@ abstract class OpenTelemetryTestCase extends TestCase
         $histogram = $this->adapter->createHistogram('minimal_histogram');
         $gauge = $this->adapter->createGauge('minimal_gauge');
         $upDownCounter = $this->adapter->createUpDownCounter('minimal_updown');
+        $observableGauge = $this->adapter->createObservableGauge('minimal_observable_gauge');
 
         $this->assertInstanceOf(Counter::class, $counter);
         $this->assertInstanceOf(Histogram::class, $histogram);
         $this->assertInstanceOf(Gauge::class, $gauge);
         $this->assertInstanceOf(UpDownCounter::class, $upDownCounter);
+        $this->assertInstanceOf(ObservableGauge::class, $observableGauge);
     }
 }

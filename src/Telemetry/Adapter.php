@@ -44,5 +44,15 @@ interface Adapter
         array $advisory = [],
     ): UpDownCounter;
 
+    /**
+     * @param array<string, mixed> $advisory
+     */
+    public function createObservableGauge(
+        string $name,
+        ?string $unit = null,
+        ?string $description = null,
+        array $advisory = [],
+    ): ObservableGauge;
+
     public function collect(): bool;
 }
