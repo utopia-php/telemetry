@@ -137,14 +137,11 @@ class Test implements Adapter
     public function createObservableGauge(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): ObservableGauge
     {
         $gauge = new class () extends ObservableGauge {
-            /**
-             * @var array<int, callable>
-             */
-            public array $callbacks = [];
+            public ?\Closure $callback = null;
 
             public function observe(callable $callback): void
             {
-                $this->callbacks[] = $callback;
+                $this->callback = \Closure::fromCallable($callback);
             }
         };
         $this->observableGauges[$name] = $gauge;
