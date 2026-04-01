@@ -6,6 +6,7 @@ use OpenTelemetry\API\Metrics\CounterInterface;
 use OpenTelemetry\API\Metrics\GaugeInterface;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterInterface;
+use OpenTelemetry\API\Metrics\ObserverInterface;
 use OpenTelemetry\API\Metrics\UpDownCounterInterface;
 use OpenTelemetry\Contrib\Otlp\ContentTypes;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
@@ -25,6 +26,7 @@ use Utopia\Telemetry\Adapter;
 use Utopia\Telemetry\Counter;
 use Utopia\Telemetry\Gauge;
 use Utopia\Telemetry\Histogram;
+use Utopia\Telemetry\ObservableGauge;
 use Utopia\Telemetry\UpDownCounter;
 
 class OpenTelemetry implements Adapter
@@ -34,13 +36,14 @@ class OpenTelemetry implements Adapter
     private MeterInterface $meter;
 
     /**
-     * @var array<class-string, array<string, Counter|UpDownCounter|Histogram|Gauge>>
+     * @var array<class-string, array<string, Counter|UpDownCounter|Histogram|Gauge|ObservableGauge>>
      */
     private array $meterStorage = [
         Counter::class => [],
         UpDownCounter::class => [],
         Histogram::class => [],
         Gauge::class => [],
+        ObservableGauge::class => [],
     ];
 
     /**
@@ -103,12 +106,12 @@ class OpenTelemetry implements Adapter
     }
 
     /**
-     * @template T of Counter|UpDownCounter|Histogram|Gauge
+     * @template T of Counter|UpDownCounter|Histogram|Gauge|ObservableGauge
      * @param class-string<T> $type
      * @param callable(): T $creator
      * @return T
      */
-    private function createMeter(string $type, string $name, callable $creator): Counter|UpDownCounter|Histogram|Gauge
+    private function createMeter(string $type, string $name, callable $creator): Counter|UpDownCounter|Histogram|Gauge|ObservableGauge
     {
         if (! isset($this->meterStorage[$type][$name])) {
             $this->meterStorage[$type][$name] = $creator();
@@ -217,6 +220,39 @@ class OpenTelemetry implements Adapter
                 public function add(float|int $amount, iterable $attributes = []): void
                 {
                     $this->upDownCounter->add($amount, $attributes);
+                }
+            };
+        });
+    }
+
+    /**
+     * Create an ObservableGauge metric
+     *
+     * @param array<string, mixed> $advisory
+     */
+    public function createObservableGauge(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): ObservableGauge
+    {
+        return $this->createMeter(ObservableGauge::class, $name, function () use ($name, $unit, $description, $advisory) {
+            $otelGauge = $this->meter->createObservableGauge($name, $unit, $description, $advisory);
+
+            return new class ($otelGauge) extends ObservableGauge {
+                private ?\Closure $callback = null;
+
+                public function __construct(private \OpenTelemetry\API\Metrics\ObservableGaugeInterface $gauge)
+                {
+                    $this->gauge->observe(function (ObserverInterface $observer): void {
+                        if ($this->callback !== null) {
+                            ($this->callback)(function (float|int $value, iterable $attributes = []) use ($observer): void {
+                                /** @var iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes */
+                                $observer->observe($value, $attributes);
+                            });
+                        }
+                    });
+                }
+
+                public function observe(callable $callback): void
+                {
+                    $this->callback = \Closure::fromCallable($callback);
                 }
             };
         });

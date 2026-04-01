@@ -6,6 +6,7 @@ use Utopia\Telemetry\Adapter;
 use Utopia\Telemetry\Counter;
 use Utopia\Telemetry\Gauge;
 use Utopia\Telemetry\Histogram;
+use Utopia\Telemetry\ObservableGauge;
 use Utopia\Telemetry\UpDownCounter;
 
 class None implements Adapter
@@ -65,6 +66,18 @@ class None implements Adapter
              * @param iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes
              */
             public function add(float|int $amount, iterable $attributes = []): void
+            {
+            }
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $advisory
+     */
+    public function createObservableGauge(string $name, ?string $unit = null, ?string $description = null, array $advisory = []): ObservableGauge
+    {
+        return new class () extends ObservableGauge {
+            public function observe(callable $callback): void
             {
             }
         };
