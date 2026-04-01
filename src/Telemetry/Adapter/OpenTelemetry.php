@@ -236,17 +236,23 @@ class OpenTelemetry implements Adapter
             $otelGauge = $this->meter->createObservableGauge($name, $unit, $description, $advisory);
 
             return new class ($otelGauge) extends ObservableGauge {
+                private ?\Closure $callback = null;
+
                 public function __construct(private \OpenTelemetry\API\Metrics\ObservableGaugeInterface $gauge)
                 {
+                    $this->gauge->observe(function (ObserverInterface $observer): void {
+                        if ($this->callback !== null) {
+                            ($this->callback)(function (float|int $value, iterable $attributes = []) use ($observer): void {
+                                /** @var iterable<non-empty-string, array<mixed>|bool|float|int|string|null> $attributes */
+                                $observer->observe($value, $attributes);
+                            });
+                        }
+                    });
                 }
 
                 public function observe(callable $callback): void
                 {
-                    $this->gauge->observe(function (ObserverInterface $observer) use ($callback): void {
-                        $callback(function (float|int $value, iterable $attributes = []) use ($observer): void {
-                            $observer->observe($value, $attributes);
-                        });
-                    });
+                    $this->callback = \Closure::fromCallable($callback);
                 }
             };
         });
