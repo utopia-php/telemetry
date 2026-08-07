@@ -42,6 +42,8 @@ class OpenTelemetry implements Adapter
 
     private MeterInterface $meter;
 
+    private bool $collecting = false;
+
     /**
      * @var array<class-string, array<string, Counter|UpDownCounter|Histogram|Gauge|ObservableGauge>>
      */
@@ -293,6 +295,15 @@ class OpenTelemetry implements Adapter
      */
     public function collect(): bool
     {
-        return $this->reader->collect();
+        if ($this->collecting) {
+            return false;
+        }
+
+        $this->collecting = true;
+        try {
+            return $this->reader->collect();
+        } finally {
+            $this->collecting = false;
+        }
     }
 }
